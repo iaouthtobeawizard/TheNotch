@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 
 Singleton {
-    property var data: ({})
+   property var configData: ({}) 
 
     FileView {
         id: configFile
@@ -19,15 +19,15 @@ Singleton {
                 return
 
             try {
-                data = JSON.parse(text())
+                configData = JSON.parse(text())            
             } catch (error) {
-                data = {}
+                configData = {}            
             }
         }
     }
 
     function value(path, fallback) {
-        var current = data
+        var current = configData
 
         for (var i = 0; i < path.length; i++) {
             if (current === undefined || current === null || current[path[i]] === undefined)

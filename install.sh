@@ -27,6 +27,7 @@ fi
 
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$BIN_DIR"
+mkdir -p "$HOME/.cache"
 
 echo "Building audio visualizer..."
 cd "$VISUALIZER_ROOT"
@@ -51,34 +52,45 @@ cp "$VISUALIZER_ROOT/target/release/audio-visualizer" \
 cp "$ROOT/rust/target/release/notch-backend" \
     "$BIN_DIR/notch-backend"
 
-cat >"$BIN_DIR/notch-qs" <<EOF
+cat >"$BIN_DIR/notch-qs" <<'EOF'
 #!/usr/bin/env bash
 
 set -e
 
-INSTALL_DIR="\$HOME/.local/share/notch-qs"
+INSTALL_DIR="$HOME/.local/share/notch-qs"
 SOCKET="/tmp/audio-visualizer.sock"
+VIS_PID=""
+QS_PID=""
 
 cleanup() {
-    if [ -n "\${VIS_PID:-}" ] && kill -0 "\$VIS_PID" 2>/dev/null; then
-        kill "\$VIS_PID" 2>/dev/null || true
-        wait "\$VIS_PID" 2>/dev/null || true
+    trap - EXIT INT TERM
+
+    if [ -n "$QS_PID" ] && kill -0 "$QS_PID" 2>/dev/null; then
+        kill "$QS_PID" 2>/dev/null || true
+        wait "$QS_PID" 2>/dev/null || true
     fi
 
-    rm -f "\$SOCKET"
+    if [ -n "$VIS_PID" ] && kill -0 "$VIS_PID" 2>/dev/null; then
+        kill "$VIS_PID" 2>/dev/null || true
+        wait "$VIS_PID" 2>/dev/null || true
+    fi
+
+    rm -f "$SOCKET"
 }
 
 trap cleanup EXIT INT TERM
 
-audio-visualizer > "\$HOME/.cache/notch-qs-audio.log" 2>&1 &
-VIS_PID=\$!
+mkdir -p "$HOME/.cache"
+
+audio-visualizer > "$HOME/.cache/notch-qs-audio.log" 2>&1 &
+VIS_PID=$!
 
 for _ in {1..50}; do
-    if [ -S "\$SOCKET" ]; then
+    if [ -S "$SOCKET" ]; then
         break
     fi
 
-    if ! kill -0 "\$VIS_PID" 2>/dev/null; then
+    if ! kill -0 "$VIS_PID" 2>/dev/null; then
         echo "Error: audio visualizer failed to start."
         exit 1
     fi
@@ -86,14 +98,17 @@ for _ in {1..50}; do
     sleep 0.1
 done
 
-if [ ! -S "\$SOCKET" ]; then
+if [ ! -S "$SOCKET" ]; then
     echo "Error: audio visualizer socket was not created."
     exit 1
 fi
 
-cd "\$INSTALL_DIR"
+cd "$INSTALL_DIR"
 
-exec quickshell -c shell.qml
+quickshell -p "$INSTALL_DIR" &
+QS_PID=$!
+
+wait "$QS_PID"
 EOF
 
 chmod +x "$BIN_DIR/notch-qs"
