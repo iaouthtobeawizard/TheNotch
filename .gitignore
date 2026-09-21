@@ -1,0 +1,4 @@
+/target
+/rust/target
+/rust/Cargo.lock 
+.qmlls.ini

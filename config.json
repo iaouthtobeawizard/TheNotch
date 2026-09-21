@@ -1,0 +1,21 @@
+{
+    "notch": {
+        "width": 300,
+        "height": 44,
+        "topMargin": 8,
+        "radius": 22
+    },
+    "features": {
+        "time": true,
+        "date": true,
+        "battery": true,
+        "visualizer": true
+    },
+    "battery": {
+        "showIcon": true,
+        "showPercentage": true
+    },
+    "theme": {
+        "source": "default"
+    }
+}
