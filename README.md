@@ -24,8 +24,8 @@ A lightweight Dynamic Island-style notch for Wayland, built with Quickshell, QML
 ## Installation
 
 ```bash
-git clone https://github.com/iaouthtobeawizard/notch.git
-cd notch
+git clone https://github.com/iaouthtobeawizard/TheNotch.git
+cd TheNotch
 ./install.sh
 ```
 
