@@ -1,9 +1,13 @@
+use audio_visualizer::{Analyzer, PipeWireCapture, VisualizerFrame};
 use serde::Deserialize;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::Command as ProcessCommand;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 const SOCKET_PATH: &str = "/tmp/notch-backend.sock";
+const VISUALIZER_SOCKET_PATH: &str = "/tmp/notch-visualizer.sock";
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "command")]
@@ -11,6 +15,9 @@ enum BackendCommand {
     #[serde(rename = "volume")]
     Volume { value: f32 },
 }
+
+type SharedFrame = Arc<Mutex<Option<VisualizerFrame>>>;
+
 fn get_brightness() -> Result<f32, String> {
     let current = ProcessCommand::new("brightnessctl")
         .arg("get")
@@ -20,7 +27,7 @@ fn get_brightness() -> Result<f32, String> {
     let maximum = ProcessCommand::new("brightnessctl")
         .arg("max")
         .output()
-        .map_err(|error| format!("failed to run brightnessctl: {error}"))?;
+        .map_err(|error| format!("failed to run brightnessctl max: {error}"))?;
 
     if !current.status.success() || !maximum.status.success() {
         return Err("brightnessctl command failed".to_string());
@@ -42,6 +49,7 @@ fn get_brightness() -> Result<f32, String> {
 
     Ok((current / maximum).clamp(0.0, 1.0))
 }
+
 fn set_brightness(value: f32) -> Result<(), String> {
     let percentage = (value.clamp(0.0, 1.0) * 100.0).round();
 
@@ -56,6 +64,7 @@ fn set_brightness(value: f32) -> Result<(), String> {
 
     Ok(())
 }
+
 fn set_volume(value: f32) -> Result<(), String> {
     let percentage = (value.clamp(0.0, 1.0) * 100.0).round();
 
@@ -85,6 +94,26 @@ fn set_volume(value: f32) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn get_volume() -> Result<f32, String> {
+    let output = ProcessCommand::new("wpctl")
+        .args(["get-volume", "@DEFAULT_AUDIO_SINK@"])
+        .output()
+        .map_err(|error| format!("failed to run wpctl: {error}"))?;
+
+    if !output.status.success() {
+        return Err(format!("wpctl exited with status {}", output.status));
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+
+    let value = text
+        .split_whitespace()
+        .find_map(|part| part.parse::<f32>().ok())
+        .ok_or_else(|| "failed to parse volume".to_string())?;
+
+    Ok(value.clamp(0.0, 1.0))
 }
 
 fn handle_connection(stream: UnixStream) {
@@ -130,25 +159,107 @@ fn handle_connection(stream: UnixStream) {
 
     println!("Client disconnected");
 }
-fn get_volume() -> Result<f32, String> {
-    let output = ProcessCommand::new("wpctl")
-        .args(["get-volume", "@DEFAULT_AUDIO_SINK@"])
-        .output()
-        .map_err(|error| format!("failed to run wpctl: {error}"))?;
 
-    if !output.status.success() {
-        return Err(format!("wpctl exited with status {}", output.status));
+fn write_frame(stream: &mut UnixStream, frame: &VisualizerFrame) -> std::io::Result<()> {
+    let payload = serde_json::json!({
+        "bands": frame.bands,
+        "rms": frame.rms,
+        "peak": frame.peak
+    });
+
+    writeln!(stream, "{payload}")?;
+    stream.flush()
+}
+
+fn handle_visualizer_connection(mut stream: UnixStream, frame: SharedFrame) {
+    println!("Visualizer client connected");
+
+    loop {
+        let current = match frame.lock() {
+            Ok(frame) => frame.clone(),
+            Err(error) => {
+                eprintln!("Visualizer frame lock error: {error}");
+                break;
+            }
+        };
+
+        if let Some(current) = current {
+            if write_frame(&mut stream, &current).is_err() {
+                break;
+            }
+        }
+
+        thread::sleep(std::time::Duration::from_millis(30));
     }
 
-    let text = String::from_utf8_lossy(&output.stdout);
-
-    let value = text
-        .split_whitespace()
-        .find_map(|part| part.parse::<f32>().ok())
-        .ok_or_else(|| "failed to parse volume".to_string())?;
-
-    Ok(value.clamp(0.0, 1.0))
+    println!("Visualizer client disconnected");
 }
+
+fn start_visualizer(frame: SharedFrame) {
+    thread::spawn(move || {
+        let capture = match PipeWireCapture::new() {
+            Ok(capture) => capture,
+            Err(error) => {
+                eprintln!("Audio visualizer failed to start: {error}");
+                return;
+            }
+        };
+
+        let mut analyzer = Analyzer::new(1024, 24, 48_000.0, 0.45, 0.12, 3.0);
+
+        println!("Audio visualizer started");
+
+        loop {
+            let samples = match capture.recv() {
+                Ok(samples) => samples,
+                Err(error) => {
+                    eprintln!("Audio visualizer stopped: {error}");
+                    break;
+                }
+            };
+
+            if let Some(current) = analyzer.process(&samples) {
+                if let Ok(mut shared) = frame.lock() {
+                    *shared = Some(current);
+                }
+            }
+        }
+    });
+}
+
+fn start_visualizer_socket(frame: SharedFrame) {
+    thread::spawn(move || {
+        let _ = std::fs::remove_file(VISUALIZER_SOCKET_PATH);
+
+        let listener = match UnixListener::bind(VISUALIZER_SOCKET_PATH) {
+            Ok(listener) => listener,
+            Err(error) => {
+                eprintln!("Failed to create visualizer socket: {error}");
+                return;
+            }
+        };
+
+        println!("notch-visualizer listening on {VISUALIZER_SOCKET_PATH}");
+
+        for stream in listener.incoming() {
+            match stream {
+                Ok(stream) => {
+                    let frame = Arc::clone(&frame);
+
+                    thread::spawn(move || {
+                        handle_visualizer_connection(stream, frame);
+                    });
+                }
+                Err(error) => {
+                    eprintln!("Visualizer connection error: {error}");
+                }
+            }
+        }
+
+        let _ = std::fs::remove_file(VISUALIZER_SOCKET_PATH);
+    });
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
@@ -168,6 +279,7 @@ fn main() {
 
         return;
     }
+
     if args.len() == 2 && args[1] == "get-volume" {
         match get_volume() {
             Ok(value) => println!("{value}"),
@@ -179,6 +291,7 @@ fn main() {
 
         return;
     }
+
     if args.len() == 3 && args[1] == "brightness" {
         let value = match args[2].parse::<f32>() {
             Ok(value) => value,
@@ -195,6 +308,7 @@ fn main() {
 
         return;
     }
+
     if args.len() == 2 && args[1] == "get-brightness" {
         match get_brightness() {
             Ok(value) => println!("{value}"),
@@ -206,6 +320,12 @@ fn main() {
 
         return;
     }
+
+    let frame = Arc::new(Mutex::new(None));
+
+    start_visualizer(Arc::clone(&frame));
+    start_visualizer_socket(frame);
+
     let _ = std::fs::remove_file(SOCKET_PATH);
 
     let listener = match UnixListener::bind(SOCKET_PATH) {

@@ -12,6 +12,11 @@ Rectangle {
     property real brightness: 0.5
     property real volume: 0.5
 
+    property bool wifiEnabled: false
+    property string wifiSsid: ""
+
+    signal wifiRequested()
+
     Process {
         id: volumeProcess
 
@@ -77,46 +82,80 @@ Rectangle {
         }
     }
 
+    Process {
+        id: wifiStatusProcess
+
+        command: [
+            "nmcli",
+            "-t",
+            "-f",
+            "WIFI",
+            "radio"
+        ]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.wifiEnabled = text.trim() === "enabled"
+
+                wifiConnectionProcess.running = true
+            }
+        }
+    }
+
+    Process {
+        id: wifiConnectionProcess
+
+        command: [
+            "nmcli",
+            "-t",
+            "-f",
+            "ACTIVE,SSID",
+            "device",
+            "wifi",
+            "list",
+            "--rescan",
+            "no"
+        ]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = text.trim().split("\n")
+                var connected = ""
+
+                for (var i = 0; i < lines.length; i++) {
+                    if (!lines[i])
+                        continue
+
+                    var parts = lines[i].split(":")
+
+                    if (parts.length < 2)
+                        continue
+
+                    if (parts[0] === "yes") {
+                        connected = parts.slice(1).join(":")
+                        break
+                    }
+                }
+
+                root.wifiSsid = connected
+            }
+        }
+    }
+
+    function refreshWifi() {
+        wifiStatusProcess.running = true
+    }
+
     Component.onCompleted: {
         getVolumeProcess.running = true
         getBrightnessProcess.running = true
-    }
-
-    function setVolume(value) {
-        root.volume = Math.max(0, Math.min(1, value))
-
-        volumeProcess.command = [
-            "notch-volume",
-            String(root.volume)
-        ]
-
-        volumeProcess.running = true
-    }
-
-    function setBrightness(value) {
-        root.brightness = Math.max(0, Math.min(1, value))
-
-        brightnessProcess.command = [
-            "notch-backend",
-            "brightness",
-            String(root.brightness)
-        ]
-
-        brightnessProcess.running = true
+        refreshWifi()
     }
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
-        spacing: 10
-
-        Text {
-            text: "Control Center"
-            color: Theme.text
-            font.bold: true
-            font.pixelSize: 18
-            Layout.fillWidth: true
-        }
+        spacing: 8
 
         Rectangle {
             Layout.fillWidth: true
@@ -152,21 +191,92 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 8
 
-            Repeater {
-                model: ["WiFi", "Bluetooth", "Power"]
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 48
+                radius: 14
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 48
-                    radius: 14
-                    color: Theme.surface
+                color: root.wifiEnabled
+                    ? Theme.accent
+                    : Theme.surface
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 140
+                    }
+                }
+
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 5
 
                     Text {
-                        anchors.centerIn: parent
-                        text: modelData
-                        color: Theme.text
-                        font.bold: true
+                        text: root.wifiEnabled
+                            ? "󰤨"
+                            : "󰤭"
+
+                        color: root.wifiEnabled
+                            ? Theme.background
+                            : Theme.text
+
+                        font.family: "Symbols Nerd Font"
+                        font.pixelSize: 17
                     }
+
+                    Text {
+                        text: !root.wifiEnabled
+                            ? "OFF"
+                            : root.wifiSsid !== ""
+                                ? root.wifiSsid
+                                : "ON"
+
+                        color: root.wifiEnabled
+                            ? Theme.background
+                            : Theme.text
+
+                        font.bold: true
+                        font.pixelSize: 9
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+
+                        Layout.maximumWidth: 72
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+
+                    onClicked: {
+                        root.wifiRequested()
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 48
+                radius: 14
+                color: Theme.surface
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "Bluetooth"
+                    color: Theme.text
+                    font.bold: true
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 48
+                radius: 14
+                color: Theme.surface
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "Power"
+                    color: Theme.text
+                    font.bold: true
                 }
             }
         }
@@ -200,12 +310,18 @@ Rectangle {
                     anchors.fill: parent
 
                     function updateBrightness(mouseX) {
-                        root.setBrightness(
-                            Math.max(
-                                0,
-                                Math.min(1, mouseX / width)
-                            )
+                        root.brightness = Math.max(
+                            0,
+                            Math.min(1, mouseX / width)
                         )
+
+                        brightnessProcess.command = [
+                            "notch-backend",
+                            "brightness",
+                            String(root.brightness)
+                        ]
+
+                        brightnessProcess.running = true
                     }
 
                     onPressed: mouse => {
@@ -252,12 +368,17 @@ Rectangle {
                     anchors.fill: parent
 
                     function updateVolume(mouseX) {
-                        root.setVolume(
-                            Math.max(
-                                0,
-                                Math.min(1, mouseX / width)
-                            )
+                        root.volume = Math.max(
+                            0,
+                            Math.min(1, mouseX / width)
                         )
+
+                        volumeProcess.command = [
+                            "notch-volume",
+                            String(root.volume)
+                        ]
+
+                        volumeProcess.running = true
                     }
 
                     onPressed: mouse => {

@@ -6,77 +6,51 @@ import "../../config"
 Item {
     id: root
 
-    property bool active: rms > 0.001
-    property var bands: []
     property var smoothBands: []
-    property real rms: 0
-    property real peak: 0
 
-    implicitWidth: active ? 86 : 0
-    implicitHeight: parent ? parent.height : 0 
-    visible: Config.visualizerEnabled && active
+    implicitWidth: 72
+    implicitHeight: 28
 
     Process {
-        id: backend
+        id: visualizerProcess
 
         command: [
-            "notch-backend"
+            Quickshell.env("HOME") + "/.local/bin/notch-visualizer-stream"
         ]
 
-        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
 
-        stdout: SplitParser {
-            onRead: function(data) {
-                var lines = data.split("\n")
 
-                for (var i = 0; i < lines.length; i++) {
-                    if (!lines[i].trim())
-                        continue
+                try {
+                    var frame = JSON.parse(text.trim())
 
-                    try {
-                        var frame = JSON.parse(lines[i])
 
-                        if (frame.version !== 1)
-                            continue
 
-                        root.bands = frame.bands || []
-                        root.rms = frame.rms || 0
-                        root.peak = frame.peak || 0
-                    } catch (error) {
-                    }
+                    if (frame.bands)
+                        root.smoothBands = frame.bands
+                } catch (error) {
+
                 }
+
+                restartTimer.start()
             }
         }
     }
 
     Timer {
-        interval: 16
-        running: true
-        repeat: true
+        id: restartTimer
+
+        interval: 33
+        repeat: false
 
         onTriggered: {
-            var count = Math.min(20, root.bands.length)
-
-            if (count === 0) {
-                root.smoothBands = []
-                return
-            }
-
-            var next = []
-
-            for (var i = 0; i < count; i++) {
-                var target = root.bands[i] || 0
-                var current = root.smoothBands[i] || 0
-
-                var attack = 0.32
-                var decay = 0.12
-                var factor = target > current ? attack : decay
-
-                next.push(current + (target - current) * factor)
-            }
-
-            root.smoothBands = next
+            visualizerProcess.running = true
         }
+    }
+
+    Component.onCompleted: {
+        visualizerProcess.running = true
     }
 
     Row {
@@ -105,7 +79,7 @@ Item {
 
                 height:
                     Math.max(
-                        3,
+                        4,
                         level * root.height * 0.82 * wave
                     )
 

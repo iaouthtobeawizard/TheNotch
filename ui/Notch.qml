@@ -2,11 +2,13 @@ import QtQuick
 import QtQuick.Layouts
 import "../config"
 import "./features"
+import "./features/wifi"
 
 Item {
     id: root
 
     property bool expanded: false
+    property bool wifiMenuOpen: false
 
     readonly property real compactWidth: Geometry.compactWidth
     readonly property real compactHeight: Geometry.compactHeight
@@ -34,7 +36,9 @@ Item {
         anchors.fill: parent
 
         radius: root.expanded ? 24 : Geometry.compactRadius
-        color: Theme.background
+        color: root.wifiMenuOpen
+            ? Theme.accent
+            : Theme.background
 
         Behavior on radius {
             NumberAnimation {
@@ -43,10 +47,19 @@ Item {
             }
         }
 
+        Behavior on color {
+            ColorAnimation {
+                duration: 160
+            }
+        }
+
         Loader {
+            id: expandedLoader
+
             anchors.fill: parent
+
             sourceComponent: root.expanded
-                ? controlCenter
+                ? expandedView
                 : compact
         }
     }
@@ -90,7 +103,7 @@ Item {
     }
 
     Component {
-        id: controlCenter
+        id: expandedView
 
         Item {
             anchors.fill: parent
@@ -102,13 +115,39 @@ Item {
 
                 onExited: {
                     root.expanded = false
+                    root.wifiMenuOpen = false
                 }
             }
 
-            ControlCenter {
+            Loader {
                 anchors.fill: parent
+
+                sourceComponent: root.wifiMenuOpen
+                    ? wifiMenu
+                    : controlCenter
+
                 z: 1
             }
+        }
+    }
+
+    Component {
+        id: controlCenter
+
+        ControlCenter {
+            anchors.fill: parent
+
+            onWifiRequested: {
+                root.wifiMenuOpen = true
+            }
+        }
+    }
+
+    Component {
+        id: wifiMenu
+
+        Wifi {
+            anchors.fill: parent
         }
     }
 }

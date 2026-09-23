@@ -7,3 +7,9 @@ edition = "2024"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 libpulse-binding = "2"
+anyhow = "1"
+
+audio-visualizer = {
+    git = "https://github.com/iaouthtobeawizard/audio-visualizer.git",
+    branch = "main"
+}
