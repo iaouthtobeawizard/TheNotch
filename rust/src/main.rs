@@ -184,7 +184,8 @@ fn handle_visualizer_connection(mut stream: UnixStream, frame: SharedFrame) {
         };
 
         if let Some(current) = current {
-            if write_frame(&mut stream, &current).is_err() {
+            if let Err(error) = write_frame(&mut stream, &current) {
+                println!("Visualizer write error: {error}");
                 break;
             }
         }

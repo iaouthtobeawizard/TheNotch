@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import Quickshell.Io
 import "../../config"
 
@@ -11,46 +10,26 @@ Item {
     implicitWidth: 72
     implicitHeight: 28
 
-    Process {
-        id: visualizerProcess
+    Socket {
+        id: socket
 
-        command: [
-            Quickshell.env("HOME") + "/.local/bin/notch-visualizer-stream"
-        ]
+        path: "/tmp/notch-visualizer.sock"
+        connected: true
 
-        stdout: StdioCollector {
-            onStreamFinished: {
+        parser: SplitParser {
+            splitMarker: "\n"
 
-
+            onRead: data => {
                 try {
-                    var frame = JSON.parse(text.trim())
-
-
+                    var frame = JSON.parse(data)
 
                     if (frame.bands)
                         root.smoothBands = frame.bands
                 } catch (error) {
-
+                    console.log("Visualizer JSON error:", error)
                 }
-
-                restartTimer.start()
             }
         }
-    }
-
-    Timer {
-        id: restartTimer
-
-        interval: 33
-        repeat: false
-
-        onTriggered: {
-            visualizerProcess.running = true
-        }
-    }
-
-    Component.onCompleted: {
-        visualizerProcess.running = true
     }
 
     Row {
