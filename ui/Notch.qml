@@ -85,9 +85,9 @@ Item {
             Visualizer {
                 id: visualizer
 
-                visible: Config.visualizerEnabled && active
+                visible: Config.visualizerEnabled
                 Layout.alignment: Qt.AlignVCenter
-                Layout.preferredWidth: active ? implicitWidth : 0
+                Layout.preferredWidth: implicitWidth
                 Layout.fillHeight: true
             }
 

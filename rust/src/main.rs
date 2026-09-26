@@ -1,13 +1,13 @@
 use audio_visualizer::{Analyzer, PipeWireCapture, VisualizerFrame};
 use serde::Deserialize;
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
+use std::io::{BufRead, BufReader};
+use std::os::unix::net::UnixStream;
 use std::process::Command as ProcessCommand;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 const SOCKET_PATH: &str = "/tmp/notch-backend.sock";
-const VISUALIZER_SOCKET_PATH: &str = "/tmp/notch-visualizer.sock";
+const VISUALIZER_FRAME_PATH: &str = "/tmp/notch-visualizer.json";
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "command")]
@@ -68,8 +68,6 @@ fn set_brightness(value: f32) -> Result<(), String> {
 fn set_volume(value: f32) -> Result<(), String> {
     let percentage = (value.clamp(0.0, 1.0) * 100.0).round();
 
-    println!("Setting volume to {percentage}%");
-
     let output = ProcessCommand::new("wpctl")
         .args([
             "set-volume",
@@ -78,16 +76,6 @@ fn set_volume(value: f32) -> Result<(), String> {
         ])
         .output()
         .map_err(|error| format!("failed to run wpctl: {error}"))?;
-
-    println!("wpctl status: {}", output.status);
-
-    if !output.stdout.is_empty() {
-        println!("wpctl stdout: {}", String::from_utf8_lossy(&output.stdout));
-    }
-
-    if !output.stderr.is_empty() {
-        println!("wpctl stderr: {}", String::from_utf8_lossy(&output.stderr));
-    }
 
     if !output.status.success() {
         return Err(format!("wpctl exited with status {}", output.status));
@@ -117,20 +105,16 @@ fn get_volume() -> Result<f32, String> {
 }
 
 fn handle_connection(stream: UnixStream) {
-    println!("Client connected");
-
     let reader = BufReader::new(stream);
 
     for line in reader.lines() {
         let line = match line {
             Ok(line) => line,
             Err(error) => {
-                println!("Socket read error: {error}");
+                eprintln!("Socket read error: {error}");
                 break;
             }
         };
-
-        println!("Received: {line}");
 
         if line.trim().is_empty() {
             continue;
@@ -139,61 +123,38 @@ fn handle_connection(stream: UnixStream) {
         let command = match serde_json::from_str::<BackendCommand>(&line) {
             Ok(command) => command,
             Err(error) => {
-                println!("Invalid command: {error}");
+                eprintln!("Invalid command: {error}");
                 continue;
             }
         };
 
-        println!("Parsed command: {command:?}");
-
         match command {
             BackendCommand::Volume { value } => {
                 if let Err(error) = set_volume(value) {
-                    println!("Volume error: {error}");
-                } else {
-                    println!("Volume command completed");
+                    eprintln!("Volume error: {error}");
                 }
             }
         }
     }
-
-    println!("Client disconnected");
 }
 
-fn write_frame(stream: &mut UnixStream, frame: &VisualizerFrame) -> std::io::Result<()> {
+fn write_frame_file(frame: &VisualizerFrame) {
     let payload = serde_json::json!({
         "bands": frame.bands,
         "rms": frame.rms,
         "peak": frame.peak
     });
 
-    writeln!(stream, "{payload}")?;
-    stream.flush()
-}
+    let temporary_path = format!("{VISUALIZER_FRAME_PATH}.tmp");
 
-fn handle_visualizer_connection(mut stream: UnixStream, frame: SharedFrame) {
-    println!("Visualizer client connected");
-
-    loop {
-        let current = match frame.lock() {
-            Ok(frame) => frame.clone(),
-            Err(error) => {
-                eprintln!("Visualizer frame lock error: {error}");
-                break;
-            }
-        };
-
-        if let Some(current) = current {
-            if let Err(error) = write_frame(&mut stream, &current) {
-                println!("Visualizer write error: {error}");
-                break;
-            }
-        }
-
-        thread::sleep(std::time::Duration::from_millis(30));
+    if let Err(error) = std::fs::write(&temporary_path, payload.to_string()) {
+        eprintln!("Visualizer frame write error: {error}");
+        return;
     }
 
-    println!("Visualizer client disconnected");
+    if let Err(error) = std::fs::rename(&temporary_path, VISUALIZER_FRAME_PATH) {
+        eprintln!("Visualizer frame rename error: {error}");
+    }
 }
 
 fn start_visualizer(frame: SharedFrame) {
@@ -220,44 +181,13 @@ fn start_visualizer(frame: SharedFrame) {
             };
 
             if let Some(current) = analyzer.process(&samples) {
+                write_frame_file(&current);
+
                 if let Ok(mut shared) = frame.lock() {
                     *shared = Some(current);
                 }
             }
         }
-    });
-}
-
-fn start_visualizer_socket(frame: SharedFrame) {
-    thread::spawn(move || {
-        let _ = std::fs::remove_file(VISUALIZER_SOCKET_PATH);
-
-        let listener = match UnixListener::bind(VISUALIZER_SOCKET_PATH) {
-            Ok(listener) => listener,
-            Err(error) => {
-                eprintln!("Failed to create visualizer socket: {error}");
-                return;
-            }
-        };
-
-        println!("notch-visualizer listening on {VISUALIZER_SOCKET_PATH}");
-
-        for stream in listener.incoming() {
-            match stream {
-                Ok(stream) => {
-                    let frame = Arc::clone(&frame);
-
-                    thread::spawn(move || {
-                        handle_visualizer_connection(stream, frame);
-                    });
-                }
-                Err(error) => {
-                    eprintln!("Visualizer connection error: {error}");
-                }
-            }
-        }
-
-        let _ = std::fs::remove_file(VISUALIZER_SOCKET_PATH);
     });
 }
 
@@ -324,12 +254,13 @@ fn main() {
 
     let frame = Arc::new(Mutex::new(None));
 
-    start_visualizer(Arc::clone(&frame));
-    start_visualizer_socket(frame);
-
     let _ = std::fs::remove_file(SOCKET_PATH);
+    let _ = std::fs::remove_file(VISUALIZER_FRAME_PATH);
+    let _ = std::fs::remove_file(format!("{VISUALIZER_FRAME_PATH}.tmp"));
 
-    let listener = match UnixListener::bind(SOCKET_PATH) {
+    start_visualizer(frame);
+
+    let listener = match std::os::unix::net::UnixListener::bind(SOCKET_PATH) {
         Ok(listener) => listener,
         Err(error) => {
             eprintln!("Failed to create backend socket: {error}");
@@ -342,7 +273,6 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                println!("Incoming connection");
                 handle_connection(stream);
             }
             Err(error) => {

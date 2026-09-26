@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Layouts
+import Quickshell
 import Quickshell.Io
 import "../../config"
 
@@ -7,53 +9,70 @@ Item {
 
     property var smoothBands: []
 
-    implicitWidth: 72
-    implicitHeight: 28
+    implicitWidth: bars.width
+    implicitHeight: 32
 
-    Socket {
-        id: socket
+    Process {
+        id: frameProcess
 
-        path: "/tmp/notch-visualizer.sock"
-        connected: true
+        command: [
+            "cat",
+            "/tmp/notch-visualizer.json"
+        ]
 
-        parser: SplitParser {
-            splitMarker: "\n"
-
-            onRead: data => {
+        stdout: StdioCollector {
+            onStreamFinished: {
                 try {
-                    var frame = JSON.parse(data)
+                    var frame = JSON.parse(text)
 
-                    if (frame.bands)
+                    if (frame.bands !== undefined)
                         root.smoothBands = frame.bands
                 } catch (error) {
-                    console.log("Visualizer JSON error:", error)
                 }
             }
         }
     }
 
+    Timer {
+        interval: 30
+        running: true
+        repeat: true
+
+        onTriggered: {
+            if (!frameProcess.running)
+                frameProcess.running = true
+        }
+    }
+
     Row {
+        id: bars
+
         anchors.centerIn: parent
         spacing: 2
 
         Repeater {
-            model: Math.min(16, root.smoothBands.length)
+            model: 16
 
             Rectangle {
                 width: 3
 
                 property real sourceIndex:
-                    5 + index * 14 / Math.max(1, 15)
+                    5 + index * 14 / 15
 
                 property real value:
-                    root.smoothBands[Math.round(sourceIndex)] || 0
+                    root.smoothBands.length > 0
+                        ? root.smoothBands[Math.round(sourceIndex)] || 0
+                        : 0
 
                 property real level:
-                    Math.max(0, Math.min(1, value * 0.8 / 12))
+                    Math.max(
+                        0,
+                        Math.min(1, value * 0.8 / 12)
+                    )
 
                 property real wave:
                     0.75 + 0.25 * Math.sin(
-                        (index / Math.max(1, 15)) * Math.PI
+                        (index / 15) * Math.PI
                     )
 
                 height:
