@@ -15,7 +15,11 @@ Rectangle {
     property bool wifiEnabled: false
     property string wifiSsid: ""
 
+    property bool bluetoothEnabled: false
+    property string bluetoothDevice: ""
+
     signal wifiRequested()
+    signal bluetoothRequested()
 
     Process {
         id: volumeProcess
@@ -56,9 +60,8 @@ Rectangle {
             onStreamFinished: {
                 var value = parseFloat(text.trim())
 
-                if (!isNaN(value)) {
+                if (!isNaN(value))
                     root.volume = Math.max(0, Math.min(1, value))
-                }
             }
         }
     }
@@ -75,9 +78,8 @@ Rectangle {
             onStreamFinished: {
                 var value = parseFloat(text.trim())
 
-                if (!isNaN(value)) {
+                if (!isNaN(value))
                     root.brightness = Math.max(0, Math.min(1, value))
-                }
             }
         }
     }
@@ -96,7 +98,6 @@ Rectangle {
         stdout: StdioCollector {
             onStreamFinished: {
                 root.wifiEnabled = text.trim() === "enabled"
-
                 wifiConnectionProcess.running = true
             }
         }
@@ -142,14 +143,79 @@ Rectangle {
         }
     }
 
+    Process {
+        id: bluetoothStatusProcess
+
+        command: [
+            "bluetoothctl",
+            "show"
+        ]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = text.split("\n")
+                var enabled = false
+
+                for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i].trim()
+
+                    if (line.indexOf("Powered:") === 0) {
+                        enabled = line.substring(8).trim() === "yes"
+                        break
+                    }
+                }
+
+                root.bluetoothEnabled = enabled
+                bluetoothDevicesProcess.running = true
+            }
+        }
+    }
+
+    Process {
+        id: bluetoothDevicesProcess
+
+        command: [
+            "bash",
+            "-c",
+            "bluetoothctl devices | while read -r type mac name; do " +
+            "info=$(bluetoothctl info \"$mac\"); " +
+            "connected=$(printf '%s\\n' \"$info\" | awk -F': ' '/Connected:/ {print $2}'); " +
+            "if [ \"$connected\" = \"yes\" ]; then " +
+            "printf '%s\\n' \"$name\"; " +
+            "fi; " +
+            "done"
+        ]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = text.trim().split("\n")
+                var connected = ""
+
+                for (var i = 0; i < lines.length; i++) {
+                    if (lines[i].trim() !== "") {
+                        connected = lines[i].trim()
+                        break
+                    }
+                }
+
+                root.bluetoothDevice = connected
+            }
+        }
+    }
+
     function refreshWifi() {
         wifiStatusProcess.running = true
+    }
+
+    function refreshBluetooth() {
+        bluetoothStatusProcess.running = true
     }
 
     Component.onCompleted: {
         getVolumeProcess.running = true
         getBrightnessProcess.running = true
         refreshWifi()
+        refreshBluetooth()
     }
 
     ColumnLayout {
@@ -256,13 +322,60 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 48
                 radius: 14
-                color: Theme.surface
 
-                Text {
+                color: root.bluetoothEnabled && root.bluetoothDevice !== ""
+                    ? Theme.accent
+                    : Theme.surface
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 140
+                    }
+                }
+
+                RowLayout {
                     anchors.centerIn: parent
-                    text: "Bluetooth"
-                    color: Theme.text
-                    font.bold: true
+                    spacing: 5
+
+                    Text {
+                        text: root.bluetoothEnabled
+                            ? "󰂯"
+                            : "󰂲"
+
+                        color: root.bluetoothEnabled && root.bluetoothDevice !== ""
+                            ? Theme.background
+                            : Theme.text
+
+                        font.family: "Symbols Nerd Font"
+                        font.pixelSize: 17
+                    }
+
+                    Text {
+                        text: !root.bluetoothEnabled
+                            ? "OFF"
+                            : root.bluetoothDevice !== ""
+                                ? root.bluetoothDevice
+                                : "ON"
+
+                        color: root.bluetoothEnabled && root.bluetoothDevice !== ""
+                            ? Theme.background
+                            : Theme.text
+
+                        font.bold: true
+                        font.pixelSize: 9
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+
+                        Layout.maximumWidth: 72
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+
+                    onClicked: {
+                        root.bluetoothRequested()
+                    }
                 }
             }
 
@@ -329,9 +442,8 @@ Rectangle {
                     }
 
                     onPositionChanged: mouse => {
-                        if (pressed) {
+                        if (pressed)
                             updateBrightness(mouse.x)
-                        }
                     }
                 }
             }
@@ -386,9 +498,8 @@ Rectangle {
                     }
 
                     onPositionChanged: mouse => {
-                        if (pressed) {
+                        if (pressed)
                             updateVolume(mouse.x)
-                        }
                     }
                 }
             }

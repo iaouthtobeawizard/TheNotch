@@ -14,6 +14,11 @@ Rectangle {
     property int signal: 0
     property var networks: []
 
+    property bool detailsOpen: false
+    property var selectedNetwork: ({})
+
+    readonly property string uiFont: "Inter"
+
     Process {
         id: statusProcess
 
@@ -113,24 +118,6 @@ Rectangle {
         }
     }
 
-    Process {
-        id: connectProcess
-
-        property string targetSsid: ""
-
-        command: [
-            "nmcli",
-            "device",
-            "wifi",
-            "connect",
-            targetSsid
-        ]
-
-        onExited: {
-            refresh()
-        }
-    }
-
     function refresh() {
         statusProcess.running = true
     }
@@ -140,266 +127,299 @@ Rectangle {
         toggleProcess.running = true
     }
 
-    function connectTo(ssid) {
-        if (ssid === "Hidden network")
-            return
+    function openDetails(network) {
+        root.selectedNetwork = network
+        root.detailsOpen = true
+    }
 
-        connectProcess.targetSsid = ssid
-        connectProcess.running = true
+    function closeDetails() {
+        root.detailsOpen = false
+        root.selectedNetwork = {}
+        root.refresh()
     }
 
     Component.onCompleted: {
         refresh()
     }
 
-    ColumnLayout {
+    Loader {
         anchors.fill: parent
-        anchors.margins: 10
-        spacing: 8
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 52
+        sourceComponent: root.detailsOpen
+            ? detailsView
+            : mainView
+    }
 
-            radius: 16
-            color: Theme.surface
+    Component {
+        id: detailsView
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 8
-                spacing: 8
+        WifiDetails {
+            anchors.fill: parent
 
-                Text {
-                    text: root.wifiEnabled
-                        ? "󰤨"
-                        : "󰤭"
+            ssid: root.selectedNetwork.ssid || ""
+            signal: root.selectedNetwork.signal || 0
+            security: root.selectedNetwork.security || ""
+            connected: root.selectedNetwork.active || false
 
-                    color: Theme.text
-                    font.family: "Symbols Nerd Font"
-                    font.pixelSize: 19
+            onBackRequested: {
+                root.closeDetails()
+            }
+        }
+    }
 
-                    Layout.alignment: Qt.AlignVCenter
-                }
+    Component {
+        id: mainView
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 0
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 8
 
-                    Text {
-                        text: "WiFi"
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 52
 
-                        color: Theme.text
-                        font.bold: true
-                        font.pixelSize: 12
+                radius: 16
+                color: Theme.surface
 
-                        Layout.fillWidth: true
-                    }
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 8
+                    spacing: 8
 
                     Text {
                         text: root.wifiEnabled
-                            ? "On"
-                            : "Off"
-
-                        color: Theme.textSecondary
-                        font.pixelSize: 8
-                    }
-                }
-
-                Rectangle {
-                    Layout.preferredWidth: 46
-                    Layout.preferredHeight: 24
-
-                    radius: 12
-
-                    color: root.wifiEnabled
-                        ? Theme.accent
-                        : Theme.outline
-
-                    Rectangle {
-                        width: 18
-                        height: 18
-                        radius: 9
-
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        x: root.wifiEnabled
-                            ? parent.width - width - 3
-                            : 3
+                            ? "󰤨"
+                            : "󰤭"
 
                         color: Theme.text
+                        font.family: "Symbols Nerd Font"
+                        font.pixelSize: 19
 
-                        Behavior on x {
-                            NumberAnimation {
-                                duration: 140
-                                easing.type: Easing.OutCubic
-                            }
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+
+                        Text {
+                            text: "WiFi"
+
+                            color: Theme.text
+                            font.family: root.uiFont
+                            font.bold: true
+                            font.pixelSize: 12
+                        }
+
+                        Text {
+                            text: root.wifiEnabled
+                                ? "On"
+                                : "Off"
+
+                            color: Theme.textSecondary
+                            font.family: root.uiFont
+                            font.pixelSize: 8
                         }
                     }
 
-                    MouseArea {
-                        anchors.fill: parent
+                    Rectangle {
+                        Layout.preferredWidth: 46
+                        Layout.preferredHeight: 24
+                        Layout.alignment: Qt.AlignVCenter
 
-                        onClicked: {
-                            root.toggleWifi()
+                        radius: 12
+
+                        color: root.wifiEnabled
+                            ? Theme.accent
+                            : Theme.outline
+
+                        Rectangle {
+                            width: 18
+                            height: 18
+                            radius: 9
+
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            x: root.wifiEnabled
+                                ? parent.width - width - 3
+                                : 3
+
+                            color: Theme.background
+
+                            Behavior on x {
+                                NumberAnimation {
+                                    duration: 140
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+
+                            onClicked: {
+                                root.toggleWifi()
+                            }
                         }
                     }
                 }
             }
-        }
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
-            radius: 16
-            color: Theme.surface
+                radius: 16
+                color: Theme.surface
 
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 4
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 4
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 32
-
-                    Text {
-                        text: "Available Networks"
-
-                        color: Theme.text
-                        font.bold: true
-                        font.pixelSize: 11
-
+                    RowLayout {
                         Layout.fillWidth: true
-                    }
-
-                    Rectangle {
-                        Layout.preferredWidth: 30
-                        Layout.preferredHeight: 30
-
-                        radius: 10
-                        color: Theme.background
+                        Layout.preferredHeight: 32
 
                         Text {
-                            anchors.centerIn: parent
-
-                            text: "󰑐"
+                            text: "Available Networks"
 
                             color: Theme.text
-                            font.family: "Symbols Nerd Font"
-                            font.pixelSize: 14
+                            font.family: root.uiFont
+                            font.bold: true
+                            font.pixelSize: 11
+
+                            Layout.fillWidth: true
                         }
 
-                        MouseArea {
-                            anchors.fill: parent
+                        Rectangle {
+                            Layout.preferredWidth: 30
+                            Layout.preferredHeight: 30
 
-                            onClicked: {
-                                root.refresh()
+                            radius: 10
+                            color: Theme.background
+
+
+                                anchors.centerIn: parent
+
+                                text: "󰑐"
+
+                                color: Theme.text
+                                font.family: "Symbols Nerd Font"
+                                font.pixelSize: 14
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+
+                                onClicked: {
+                                    root.refresh()
+                                }
                             }
                         }
                     }
-                }
 
-                ListView {
-                    id: networkList
+                    ListView {
+                        id: networkList
 
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
 
-                    clip: true
+                        clip: true
+                        model: root.networks
+                        spacing: 2
 
-                    model: root.networks
+                        delegate: Rectangle {
+                            width: networkList.width
+                            height: 44
 
-                    spacing: 2
+                            radius: 11
 
-                    delegate: Rectangle {
-                        width: networkList.width
-                        height: 44
+                            color: modelData.active
+                                ? Theme.outline
+                                : "transparent"
 
-                        radius: 11
-
-                        color: modelData.active
-                            ? Theme.outline
-                            : "transparent"
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 7
-                            anchors.rightMargin: 7
-                            spacing: 7
-
-                            Text {
-                                text: modelData.signal >= 75
-                                    ? "󰤨"
-                                    : modelData.signal >= 50
-                                        ? "󰤥"
-                                        : modelData.signal >= 25
-                                            ? "󰤢"
-                                            : "󰤟"
-
-                                color: modelData.active
-                                    ? Theme.accent
-                                    : Theme.text
-
-                                font.family: "Symbols Nerd Font"
-                                font.pixelSize: 16
-
-                                Layout.alignment: Qt.AlignVCenter
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 7
+                                anchors.rightMargin: 7
+                                spacing: 7
 
                                 Text {
-                                    text: modelData.ssid
+                                    text: modelData.signal >= 75
+                                        ? "󰤨"
+                                        : modelData.signal >= 50
+                                            ? "󰤥"
+                                            : modelData.signal >= 25
+                                                ? "󰤢"
+                                                : "󰤟"
 
-                                    color: Theme.text
-                                    font.bold: modelData.active
-                                    font.pixelSize: 9
+                                    color: modelData.active
+                                        ? Theme.accent
+                                        : Theme.text
 
-                                    elide: Text.ElideRight
+                                    font.family: "Symbols Nerd Font"
+                                    font.pixelSize: 16
 
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                ColumnLayout {
                                     Layout.fillWidth: true
+                                    spacing: 0
+
+                                    Text {
+                                        text: modelData.ssid
+
+                                        color: Theme.text
+                                        font.family: root.uiFont
+                                        font.bold: modelData.active
+                                        font.pixelSize: 9
+
+                                        elide: Text.ElideRight
+
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Text {
+                                        text: modelData.security !== ""
+                                            ? modelData.security
+                                            : "Open"
+
+                                        color: Theme.textSecondary
+                                        font.family: root.uiFont
+                                        font.pixelSize: 7
+
+                                        elide: Text.ElideRight
+
+                                        Layout.fillWidth: true
+                                    }
                                 }
 
                                 Text {
-                                    text: modelData.security !== ""
-                                        ? modelData.security
-                                        : "Open"
+                                    text: modelData.active
+                                        ? "Connected"
+                                        : modelData.signal + "%"
 
-                                    color: Theme.textSecondary
+                                    color: modelData.active
+                                        ? Theme.accent
+                                        : Theme.textSecondary
+
+                                    font.family: root.uiFont
                                     font.pixelSize: 7
 
-                                    elide: Text.ElideRight
-
-                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignVCenter
                                 }
                             }
 
-                            Text {
-                                text: modelData.active
-                                    ? "Connected"
-                                    : modelData.signal + "%"
+                            MouseArea {
+                                anchors.fill: parent
 
-                                color: modelData.active
-                                    ? Theme.accent
-                                    : Theme.textSecondary
-
-                                font.pixelSize: 7
-
-                                Layout.alignment: Qt.AlignVCenter
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-
-                            enabled: !modelData.active
-
-                            onClicked: {
-                                root.connectTo(modelData.ssid)
+                                onClicked: {
+                                    root.openDetails(modelData)
+                                }
                             }
                         }
                     }

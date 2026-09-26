@@ -3,12 +3,14 @@ import QtQuick.Layouts
 import "../config"
 import "./features"
 import "./features/wifi"
+import "./features/bluetooth"
 
 Item {
     id: root
 
     property bool expanded: false
     property bool wifiMenuOpen: false
+    property bool bluetoothMenuOpen: false
 
     readonly property real compactWidth: Geometry.compactWidth
     readonly property real compactHeight: Geometry.compactHeight
@@ -36,20 +38,12 @@ Item {
         anchors.fill: parent
 
         radius: root.expanded ? 24 : Geometry.compactRadius
-        color: root.wifiMenuOpen
-            ? Theme.accent
-            : Theme.background
+        color: Theme.background
 
         Behavior on radius {
             NumberAnimation {
                 duration: 160
                 easing.type: Easing.OutCubic
-            }
-        }
-
-        Behavior on color {
-            ColorAnimation {
-                duration: 160
             }
         }
 
@@ -116,15 +110,19 @@ Item {
                 onExited: {
                     root.expanded = false
                     root.wifiMenuOpen = false
+                    root.bluetoothMenuOpen = false
                 }
             }
 
             Loader {
                 anchors.fill: parent
 
-                sourceComponent: root.wifiMenuOpen
-                    ? wifiMenu
-                    : controlCenter
+                sourceComponent:
+                    root.wifiMenuOpen
+                        ? wifiMenu
+                        : root.bluetoothMenuOpen
+                            ? bluetoothMenu
+                            : controlCenter
 
                 z: 1
             }
@@ -139,6 +137,12 @@ Item {
 
             onWifiRequested: {
                 root.wifiMenuOpen = true
+                root.bluetoothMenuOpen = false
+            }
+
+            onBluetoothRequested: {
+                root.bluetoothMenuOpen = true
+                root.wifiMenuOpen = false
             }
         }
     }
@@ -147,6 +151,14 @@ Item {
         id: wifiMenu
 
         Wifi {
+            anchors.fill: parent
+        }
+    }
+
+    Component {
+        id: bluetoothMenu
+
+        Bluetooth {
             anchors.fill: parent
         }
     }
