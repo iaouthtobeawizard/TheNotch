@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell.Io
 import "../config"
-
+import "./features/media"
 Rectangle {
     id: root
 
@@ -321,40 +321,11 @@ Rectangle {
         anchors.margins: 16
         spacing: 8
 
-        Rectangle {
+        Media {
             Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            radius: 16
-            color: Theme.surface
-
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 14
-                spacing: 4
-
-                Text {
-                    text: "Media"
-
-                    color: Theme.text
-                    font.family: root.uiFont
-                    font.weight: Font.DemiBold
-                    font.pixelSize: 15
-                }
-
-                Text {
-                    text: "Nothing playing"
-
-                    color: Theme.textSecondary
-                    font.family: root.uiFont
-                    font.weight: Font.Normal
-                    font.pixelSize: 12
-                }
-
-                Item {
-                    Layout.fillHeight: true
-                }
-            }
+            Layout.preferredHeight: 148
+            Layout.minimumHeight: 148
+            Layout.maximumHeight: 148
         }
 
         RowLayout {
