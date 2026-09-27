@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import "../../config"
@@ -6,73 +7,66 @@ import "../../config"
 Item {
     id: root
 
-    property bool active: rms > 0.001
-    property var bands: []
     property var smoothBands: []
-    property real rms: 0
-    property real peak: 0
+    property var targetBands: []
 
-    implicitWidth: active ? 86 : 0
-    implicitHeight: parent ? parent.height : 0 
-    visible: Config.visualizerEnabled && active
+    implicitWidth: bars.width
+    implicitHeight: 32
 
     Process {
-        id: backend
+        id: frameProcess
 
         command: [
-            "notch-backend"
+            "cat",
+            "/tmp/notch-visualizer.json"
         ]
 
-        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var frame = JSON.parse(text)
 
-        stdout: SplitParser {
-            onRead: function(data) {
-                var lines = data.split("\n")
-
-                for (var i = 0; i < lines.length; i++) {
-                    if (!lines[i].trim())
-                        continue
-
-                    try {
-                        var frame = JSON.parse(lines[i])
-
-                        if (frame.version !== 1)
-                            continue
-
-                        root.bands = frame.bands || []
-                        root.rms = frame.rms || 0
-                        root.peak = frame.peak || 0
-                    } catch (error) {
+                    if (frame.bands !== undefined) {
+                        root.targetBands = frame.bands
                     }
+                } catch (error) {
                 }
             }
         }
     }
 
     Timer {
-        interval: 16
+        interval: 25
         running: true
         repeat: true
 
         onTriggered: {
-            var count = Math.min(20, root.bands.length)
+            if (!frameProcess.running)
+                frameProcess.running = true
+        }
+    }
 
-            if (count === 0) {
-                root.smoothBands = []
-                return
-            }
+    Timer {
+        interval: 30
+        running: true
+        repeat: true
 
+        onTriggered: {
             var next = []
 
-            for (var i = 0; i < count; i++) {
-                var target = root.bands[i] || 0
-                var current = root.smoothBands[i] || 0
+            for (var i = 0; i < root.targetBands.length; i++) {
+                var current = root.smoothBands.length > i
+                    ? root.smoothBands[i]
+                    : 0
 
-                var attack = 0.32
-                var decay = 0.12
-                var factor = target > current ? attack : decay
+                var target = Number(root.targetBands[i])
 
-                next.push(current + (target - current) * factor)
+                if (isNaN(target))
+                    target = 0
+
+                next.push(
+                    current + (target - current) * 0.35
+                )
             }
 
             root.smoothBands = next
@@ -80,42 +74,62 @@ Item {
     }
 
     Row {
+        id: bars
+
         anchors.centerIn: parent
         spacing: 2
 
         Repeater {
-            model: Math.min(16, root.smoothBands.length)
+            model: 16
 
             Rectangle {
                 width: 3
 
                 property real sourceIndex:
-                    5 + index * 14 / Math.max(1, 15)
+                    root.smoothBands.length > 0
+                        ? Math.floor(
+                            index *
+                            (root.smoothBands.length - 1) /
+                            15
+                        )
+                        : 0
 
                 property real value:
-                    root.smoothBands[Math.round(sourceIndex)] || 0
+                    root.smoothBands.length > sourceIndex
+                        ? Number(root.smoothBands[sourceIndex])
+                        : 0
+
+                property real peak:
+                    root.smoothBands.length > 0
+                        ? Math.max.apply(null, root.smoothBands)
+                        : 1
 
                 property real level:
-                    Math.max(0, Math.min(1, value * 0.8 / 12))
+                    peak > 0
+                        ? value / peak
+                        : 0
 
                 property real wave:
-                    0.75 + 0.25 * Math.sin(
-                        (index / Math.max(1, 15)) * Math.PI
+                    0.75 +
+                    0.25 *
+                    Math.sin(
+                        (index / 15) * Math.PI
                     )
 
                 height:
-                    Math.max(
-                        3,
-                        level * root.height * 0.82 * wave
-                    )
+                    4 +
+                    level *
+                    (root.height * 0.82 - 4) *
+                    wave
 
                 radius: width / 2
                 anchors.verticalCenter: parent.verticalCenter
+
                 color: Theme.accent
 
                 Behavior on height {
                     NumberAnimation {
-                        duration: 90
+                        duration: 70
                         easing.type: Easing.OutCubic
                     }
                 }

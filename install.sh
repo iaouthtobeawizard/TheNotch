@@ -3,9 +3,10 @@
 set -e
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VISUALIZER_ROOT="$HOME/Projects/audio-visualizer"
 INSTALL_DIR="$HOME/.local/share/notch-qs"
 BIN_DIR="$HOME/.local/bin"
+SERVICE_DIR="$HOME/.config/systemd/user"
+CONFIG_DIR="$HOME/.config/notch-qs"
 
 echo "Installing Notch-qs..."
 
@@ -19,92 +20,83 @@ if ! command -v cargo >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ ! -d "$VISUALIZER_ROOT" ]; then
-    echo "Error: audio-visualizer not found at:"
-    echo "$VISUALIZER_ROOT"
+if ! command -v systemctl >/dev/null 2>&1; then
+    echo "Error: systemctl is not installed."
     exit 1
 fi
 
-mkdir -p "$INSTALL_DIR"
 mkdir -p "$BIN_DIR"
-
-echo "Building audio visualizer..."
-cd "$VISUALIZER_ROOT"
-cargo build --release
+mkdir -p "$SERVICE_DIR"
+mkdir -p "$CONFIG_DIR"
 
 echo "Building Notch backend..."
+
 cd "$ROOT/rust"
 cargo build --release
+
+if [ ! -f "$ROOT/rust/target/release/notch-backend" ]; then
+    echo "Error: notch-backend binary was not built."
+    exit 1
+fi
 
 echo "Installing files..."
 
 rm -rf "$INSTALL_DIR"
 
 mkdir -p "$INSTALL_DIR"
+
 cp -r "$ROOT/config" "$INSTALL_DIR/"
 cp -r "$ROOT/ui" "$INSTALL_DIR/"
 cp "$ROOT/shell.qml" "$INSTALL_DIR/"
 
-cp "$VISUALIZER_ROOT/target/release/audio-visualizer" \
-    "$BIN_DIR/audio-visualizer"
-
-cp "$ROOT/rust/target/release/notch-backend" \
+install -Dm755 \
+    "$ROOT/rust/target/release/notch-backend" \
     "$BIN_DIR/notch-backend"
 
-cat >"$BIN_DIR/notch-qs" <<EOF
+cat >"$BIN_DIR/notch-qs" <<'EOF'
 #!/usr/bin/env bash
 
 set -e
 
-INSTALL_DIR="\$HOME/.local/share/notch-qs"
-SOCKET="/tmp/audio-visualizer.sock"
+INSTALL_DIR="$HOME/.local/share/notch-qs"
 
-cleanup() {
-    if [ -n "\${VIS_PID:-}" ] && kill -0 "\$VIS_PID" 2>/dev/null; then
-        kill "\$VIS_PID" 2>/dev/null || true
-        wait "\$VIS_PID" 2>/dev/null || true
-    fi
+cd "$INSTALL_DIR"
 
-    rm -f "\$SOCKET"
-}
-
-trap cleanup EXIT INT TERM
-
-audio-visualizer > "\$HOME/.cache/notch-qs-audio.log" 2>&1 &
-VIS_PID=\$!
-
-for _ in {1..50}; do
-    if [ -S "\$SOCKET" ]; then
-        break
-    fi
-
-    if ! kill -0 "\$VIS_PID" 2>/dev/null; then
-        echo "Error: audio visualizer failed to start."
-        exit 1
-    fi
-
-    sleep 0.1
-done
-
-if [ ! -S "\$SOCKET" ]; then
-    echo "Error: audio visualizer socket was not created."
-    exit 1
-fi
-
-cd "\$INSTALL_DIR"
-
-exec quickshell -c shell.qml
+exec quickshell -p "$INSTALL_DIR"
 EOF
 
-chmod +x "$BIN_DIR/notch-qs"
-chmod +x "$BIN_DIR/audio-visualizer"
-chmod +x "$BIN_DIR/notch-backend"
+chmod 755 "$BIN_DIR/notch-qs"
 
-mkdir -p "$HOME/.config/notch-qs"
+cat >"$SERVICE_DIR/notch-backend.service" <<'EOF'
+[Unit]
+Description=Notch Backend
+After=graphical-session.target
+PartOf=graphical-session.target
 
-if [ ! -f "$HOME/.config/notch-qs/config.json" ]; then
-    cp "$ROOT/config/default.json" \
-        "$HOME/.config/notch-qs/config.json"
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/notch-backend
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+if [ ! -f "$CONFIG_DIR/config.json" ]; then
+    cp "$ROOT/config/default.json" "$CONFIG_DIR/config.json"
+fi
+
+systemctl --user daemon-reload
+systemctl --user enable notch-backend.service
+systemctl --user restart notch-backend.service
+
+if ! systemctl --user is-active --quiet notch-backend.service; then
+    echo
+    echo "Error: notch-backend.service failed to start."
+    echo
+    systemctl --user status notch-backend.service --no-pager
+    exit 1
 fi
 
 echo
@@ -116,3 +108,7 @@ echo
 echo "Installed to:"
 echo "  $INSTALL_DIR"
 echo "  $BIN_DIR/notch-qs"
+echo "  $BIN_DIR/notch-backend"
+echo
+echo "Backend:"
+echo "  systemctl --user status notch-backend.service"
