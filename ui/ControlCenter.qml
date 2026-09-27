@@ -18,8 +18,14 @@ Rectangle {
     property bool bluetoothEnabled: false
     property string bluetoothDevice: ""
 
+    property string powerProfile: "balanced"
+    property var powerProfiles: []
+
     signal wifiRequested()
     signal bluetoothRequested()
+
+    readonly property string uiFont: "Noto Sans"
+    readonly property string iconFont: "Symbols Nerd Font"
 
     Process {
         id: volumeProcess
@@ -203,6 +209,78 @@ Rectangle {
         }
     }
 
+    Process {
+        id: powerProfilesProcess
+
+        command: [
+            "bash",
+            "-c",
+            "powerprofilesctl list | " +
+            "grep -E '^[[:space:]]*\\*?[[:space:]]*(performance|balanced|power-saver):' | " +
+            "sed -E 's/^[[:space:]]*\\*?[[:space:]]*([^:]+):.*$/\\1/'"
+        ]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = text.trim().split("\n")
+                var profiles = []
+
+                for (var i = 0; i < lines.length; i++) {
+                    var profile = lines[i].trim()
+
+                    if (profile === "")
+                        continue
+
+                    if (profiles.indexOf(profile) === -1)
+                        profiles.push(profile)
+                }
+
+                root.powerProfiles = profiles
+                powerProfileProcess.running = true
+            }
+        }
+    }
+
+    Process {
+        id: powerProfileProcess
+
+        command: [
+            "powerprofilesctl",
+            "get"
+        ]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var value = text.trim()
+
+                if (value !== "")
+                    root.powerProfile = value
+            }
+        }
+    }
+
+    Process {
+        id: setPowerProfileProcess
+
+        property string targetProfile: ""
+
+        command: [
+            "powerprofilesctl",
+            "set",
+            targetProfile
+        ]
+
+        onExited: {
+            powerProfileProcess.running = true
+            powerTile.scale = 0.94
+            powerChangeAnimation.restart()
+
+            Qt.callLater(function() {
+                powerTile.scale = 1
+            })
+        }
+    }
+
     function refreshWifi() {
         wifiStatusProcess.running = true
     }
@@ -211,11 +289,31 @@ Rectangle {
         bluetoothStatusProcess.running = true
     }
 
+    function refreshPowerProfile() {
+        powerProfilesProcess.running = true
+    }
+
+    function cyclePowerProfile() {
+        if (root.powerProfiles.length === 0)
+            return
+
+        var index = root.powerProfiles.indexOf(root.powerProfile)
+
+        if (index < 0)
+            index = 0
+        else
+            index = (index + 1) % root.powerProfiles.length
+
+        setPowerProfileProcess.targetProfile = root.powerProfiles[index]
+        setPowerProfileProcess.running = true
+    }
+
     Component.onCompleted: {
         getVolumeProcess.running = true
         getBrightnessProcess.running = true
         refreshWifi()
         refreshBluetooth()
+        refreshPowerProfile()
     }
 
     ColumnLayout {
@@ -226,6 +324,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
+
             radius: 16
             color: Theme.surface
 
@@ -236,14 +335,19 @@ Rectangle {
 
                 Text {
                     text: "Media"
+
                     color: Theme.text
-                    font.bold: true
+                    font.family: root.uiFont
+                    font.weight: Font.DemiBold
                     font.pixelSize: 15
                 }
 
                 Text {
                     text: "Nothing playing"
+
                     color: Theme.textSecondary
+                    font.family: root.uiFont
+                    font.weight: Font.Normal
                     font.pixelSize: 12
                 }
 
@@ -260,6 +364,7 @@ Rectangle {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 48
+
                 radius: 14
 
                 color: root.wifiEnabled
@@ -285,7 +390,7 @@ Rectangle {
                             ? Theme.background
                             : Theme.text
 
-                        font.family: "Symbols Nerd Font"
+                        font.family: root.iconFont
                         font.pixelSize: 17
                     }
 
@@ -300,8 +405,10 @@ Rectangle {
                             ? Theme.background
                             : Theme.text
 
-                        font.bold: true
+                        font.family: root.uiFont
+                        font.weight: Font.DemiBold
                         font.pixelSize: 9
+
                         elide: Text.ElideRight
                         maximumLineCount: 1
 
@@ -321,6 +428,7 @@ Rectangle {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 48
+
                 radius: 14
 
                 color: root.bluetoothEnabled && root.bluetoothDevice !== ""
@@ -346,7 +454,7 @@ Rectangle {
                             ? Theme.background
                             : Theme.text
 
-                        font.family: "Symbols Nerd Font"
+                        font.family: root.iconFont
                         font.pixelSize: 17
                     }
 
@@ -361,8 +469,10 @@ Rectangle {
                             ? Theme.background
                             : Theme.text
 
-                        font.bold: true
+                        font.family: root.uiFont
+                        font.weight: Font.DemiBold
                         font.pixelSize: 9
+
                         elide: Text.ElideRight
                         maximumLineCount: 1
 
@@ -378,45 +488,195 @@ Rectangle {
                     }
                 }
             }
+             Rectangle {
+                id: powerTile
 
-            Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 48
-                radius: 14
-                color: Theme.surface
 
-                Text {
+                radius: 14
+                color: Theme.accent
+
+                scale: 1
+
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 180
+                        easing.type: Easing.OutBack
+                    }
+                }
+
+                SequentialAnimation {
+                    id: powerChangeAnimation
+
+                    PropertyAction {
+                        target: powerIcon
+                        property: "opacity"
+                        value: 0
+                    }
+
+                    PropertyAction {
+                        target: powerLabel
+                        property: "opacity"
+                        value: 0
+                    }
+
+                    PropertyAction {
+                        target: powerIcon
+                        property: "rotation"
+                        value: -90
+                    }
+
+                    PauseAnimation {
+                        duration: 60
+                    }
+
+                    ParallelAnimation {
+                        NumberAnimation {
+                            target: powerIcon
+                            property: "opacity"
+                            to: 1
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+
+                        NumberAnimation {
+                            target: powerIcon
+                            property: "rotation"
+                            to: 0
+                            duration: 220
+                            easing.type: Easing.OutBack
+                        }
+
+                        NumberAnimation {
+                            target: powerIcon
+                            property: "x"
+                            to: 0
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+
+                        NumberAnimation {
+                            target: powerLabel
+                            property: "opacity"
+                            to: 1
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                }
+
+                RowLayout {
                     anchors.centerIn: parent
-                    text: "Power"
-                    color: Theme.text
-                    font.bold: true
+                    spacing: 6
+
+                    Text {
+                        id: powerIcon
+
+                        text: root.powerProfile === "performance"
+                            ? "󰓅"
+                            : root.powerProfile === "power-saver"
+                                ? "󰂄"
+                                : "󰾆"
+
+                        color: Theme.background
+
+                        font.family: root.iconFont
+                        font.pixelSize: 17
+
+                        opacity: 1
+                        rotation: 0
+                        x: 0
+                    }
+
+                    Text {
+                        id: powerLabel
+
+                        text: root.powerProfile === "performance"
+                            ? "Performance"
+                            : root.powerProfile === "power-saver"
+                                ? "Power Saver"
+                                : "Balanced"
+
+                        color: Theme.background
+
+                        font.family: root.uiFont
+                        font.weight: Font.DemiBold
+                        font.pixelSize: 9
+
+                        opacity: 1
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 120
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+
+                    onClicked: {
+                        root.cyclePowerProfile()
+                    }
                 }
             }
         }
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 5
+            spacing: 6
 
             Text {
                 text: "Brightness " + Math.round(root.brightness * 100) + "%"
+
                 color: Theme.textSecondary
-                font.pixelSize: 11
+                font.family: root.uiFont
+                font.pixelSize: 10
             }
 
             Rectangle {
                 id: brightnessTrack
 
                 Layout.fillWidth: true
-                Layout.preferredHeight: 10
-                radius: 5
+                Layout.preferredHeight: 14
+
+                radius: 7
                 color: Theme.surface
 
                 Rectangle {
                     width: brightnessTrack.width * root.brightness
                     height: parent.height
+
                     radius: parent.radius
                     color: Theme.accent
+                }
+
+                Rectangle {
+                    width: 18
+                    height: 18
+                    radius: 9
+
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    x: Math.max(
+                        0,
+                        Math.min(
+                            brightnessTrack.width - width,
+                            brightnessTrack.width * root.brightness - width / 2
+                        )
+                    )
+
+                    color: Theme.text
+
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: 70
+                            easing.type: Easing.OutCubic
+                        }
+                    }
                 }
 
                 MouseArea {
@@ -451,29 +711,56 @@ Rectangle {
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 5
+            spacing: 6
 
             Text {
                 text: "Volume " + Math.round(root.volume * 100) + "%"
+
                 color: Theme.textSecondary
-                font.pixelSize: 11
+                font.family: root.uiFont
+                font.pixelSize: 10
             }
 
             Rectangle {
                 id: volumeTrack
 
                 Layout.fillWidth: true
-                Layout.preferredHeight: 10
-                radius: 5
+                Layout.preferredHeight: 14
+
+                radius: 7
                 color: Theme.surface
 
                 Rectangle {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width * root.volume
+                    width: volumeTrack.width * root.volume
                     height: parent.height
+
                     radius: parent.radius
                     color: Theme.accent
+                }
+
+                Rectangle {
+                    width: 18
+                    height: 18
+                    radius: 9
+
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    x: Math.max(
+                        0,
+                        Math.min(
+                            volumeTrack.width - width,
+                            volumeTrack.width * root.volume - width / 2
+                        )
+                    )
+
+                    color: Theme.text
+
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: 70
+                            easing.type: Easing.OutCubic
+                        }
+                    }
                 }
 
                 MouseArea {

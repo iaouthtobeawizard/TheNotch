@@ -23,6 +23,9 @@ Rectangle {
     property string gateway: ""
     property string dns: ""
 
+    readonly property string uiFont: "Noto Sans"
+    readonly property string iconFont: "Symbols Nerd Font"
+
     Process {
         id: detailsProcess
 
@@ -122,14 +125,14 @@ Rectangle {
 
     Component.onCompleted: refresh()
 
-    Column {
+    ColumnLayout {
         anchors.fill: parent
         anchors.margins: 10
-        spacing: 8
+        spacing: 6
 
         Rectangle {
-            width: parent.width
-            height: 44
+            Layout.fillWidth: true
+            Layout.preferredHeight: 40
 
             radius: 14
             color: Theme.surface
@@ -142,7 +145,7 @@ Rectangle {
                 text: "󰁍"
 
                 color: Theme.text
-                font.family: "Symbols Nerd Font"
+                font.family: root.iconFont
                 font.pixelSize: 17
 
                 MouseArea {
@@ -157,14 +160,15 @@ Rectangle {
                 text: "WiFi Details"
 
                 color: Theme.text
-                font.bold: true
+                font.family: root.uiFont
+                font.weight: Font.DemiBold
                 font.pixelSize: 12
             }
         }
 
         Rectangle {
-            width: parent.width
-            height: 76
+            Layout.fillWidth: true
+            Layout.preferredHeight: 68
 
             radius: 16
             color: Theme.surface
@@ -180,7 +184,7 @@ Rectangle {
                     ? Theme.accent
                     : Theme.text
 
-                font.family: "Symbols Nerd Font"
+                font.family: root.iconFont
                 font.pixelSize: 25
             }
 
@@ -189,7 +193,7 @@ Rectangle {
                 anchors.leftMargin: 52
                 anchors.verticalCenter: parent.verticalCenter
 
-                spacing: 3
+                spacing: 2
 
                 Text {
                     width: parent.parent.width - 68
@@ -197,8 +201,9 @@ Rectangle {
                     text: root.ssid
 
                     color: Theme.text
-                    font.bold: true
-                    font.pixelSize: 12
+                    font.family: root.uiFont
+                    font.weight: Font.DemiBold
+                    font.pixelSize: 11
 
                     elide: Text.ElideRight
                 }
@@ -212,6 +217,8 @@ Rectangle {
                         ? Theme.accent
                         : Theme.textSecondary
 
+                    font.family: root.uiFont
+                    font.weight: Font.Normal
                     font.pixelSize: 8
                 }
 
@@ -221,14 +228,17 @@ Rectangle {
                         : "Open  •  " + root.signal + "%"
 
                     color: Theme.textSecondary
+                    font.family: root.uiFont
+                    font.weight: Font.Normal
                     font.pixelSize: 7
                 }
             }
         }
 
         Rectangle {
-            width: parent.width
-            height: 132
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 100
 
             radius: 16
             color: Theme.surface
@@ -242,7 +252,8 @@ Rectangle {
                 text: "Connection"
 
                 color: Theme.text
-                font.bold: true
+                font.family: root.uiFont
+                font.weight: Font.DemiBold
                 font.pixelSize: 10
             }
 
@@ -267,6 +278,7 @@ Rectangle {
                         text: "Interface"
 
                         color: Theme.textSecondary
+                        font.family: root.uiFont
                         font.pixelSize: 8
                     }
 
@@ -279,6 +291,7 @@ Rectangle {
                             : "Unavailable"
 
                         color: Theme.text
+                        font.family: root.uiFont
                         font.pixelSize: 8
                     }
                 }
@@ -294,6 +307,7 @@ Rectangle {
                         text: "IP Address"
 
                         color: Theme.textSecondary
+                        font.family: root.uiFont
                         font.pixelSize: 8
                     }
 
@@ -306,6 +320,7 @@ Rectangle {
                             : "Not connected"
 
                         color: Theme.text
+                        font.family: root.uiFont
                         font.pixelSize: 8
                     }
                 }
@@ -321,6 +336,7 @@ Rectangle {
                         text: "Gateway"
 
                         color: Theme.textSecondary
+                        font.family: root.uiFont
                         font.pixelSize: 8
                     }
 
@@ -333,6 +349,7 @@ Rectangle {
                             : "Not connected"
 
                         color: Theme.text
+                        font.family: root.uiFont
                         font.pixelSize: 8
                     }
                 }
@@ -348,6 +365,7 @@ Rectangle {
                         text: "DNS"
 
                         color: Theme.textSecondary
+                        font.family: root.uiFont
                         font.pixelSize: 8
                     }
 
@@ -360,6 +378,7 @@ Rectangle {
                             : "Not connected"
 
                         color: Theme.text
+                        font.family: root.uiFont
                         font.pixelSize: 8
 
                         elide: Text.ElideLeft
@@ -368,15 +387,14 @@ Rectangle {
             }
         }
 
-        Row {
-            width: parent.width
-            height: 38
-
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 34
             spacing: 8
 
             Rectangle {
-                width: (parent.width - 8) / 2
-                height: 38
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
                 radius: 11
 
@@ -395,8 +413,9 @@ Rectangle {
                         ? Theme.text
                         : Theme.background
 
-                    font.bold: true
-                    font.pixelSize: 8
+                    font.family: root.uiFont
+                    font.weight: Font.DemiBold
+                    font.pixelSize: 9
                 }
 
                 MouseArea {
@@ -412,8 +431,8 @@ Rectangle {
             }
 
             Rectangle {
-                width: (parent.width - 8) / 2
-                height: 38
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
                 radius: 11
                 color: Theme.surface
@@ -424,7 +443,9 @@ Rectangle {
                     text: "Forget Network"
 
                     color: Theme.textSecondary
-                    font.pixelSize: 8
+                    font.family: root.uiFont
+                    font.weight: Font.Normal
+                    font.pixelSize: 9
                 }
 
                 MouseArea {

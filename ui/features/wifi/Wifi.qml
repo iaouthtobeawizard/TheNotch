@@ -17,7 +17,8 @@ Rectangle {
     property bool detailsOpen: false
     property var selectedNetwork: ({})
 
-    readonly property string uiFont: "Inter"
+    readonly property string uiFont: "Noto Sans"
+    readonly property string iconFont: "Symbols Nerd Font"
 
     Process {
         id: statusProcess
@@ -182,86 +183,90 @@ Rectangle {
                 radius: 16
                 color: Theme.surface
 
-                RowLayout {
-                    anchors.fill: parent
+                Text {
+                    id: wifiIcon
+
+                    anchors.left: parent.left
                     anchors.leftMargin: 12
-                    anchors.rightMargin: 8
-                    spacing: 8
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    text: root.wifiEnabled
+                        ? "󰤨"
+                        : "󰤭"
+
+                    color: Theme.text
+                    font.family: root.iconFont
+                    font.pixelSize: 19
+                }
+
+                Column {
+                    anchors.left: wifiIcon.right
+                    anchors.leftMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    spacing: 0
+
+                    Text {
+                        text: "WiFi"
+
+                        color: Theme.text
+                        font.family: root.uiFont
+                        font.weight: Font.DemiBold
+                        font.pixelSize: 12
+                    }
 
                     Text {
                         text: root.wifiEnabled
-                            ? "󰤨"
-                            : "󰤭"
+                            ? "On"
+                            : "Off"
 
-                        color: Theme.text
-                        font.family: "Symbols Nerd Font"
-                        font.pixelSize: 19
-
-                        Layout.alignment: Qt.AlignVCenter
+                        color: Theme.textSecondary
+                        font.family: root.uiFont
+                        font.weight: Font.Normal
+                        font.pixelSize: 9
                     }
+                }
 
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 0
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
 
-                        Text {
-                            text: "WiFi"
+                    width: 46
+                    height: 24
 
-                            color: Theme.text
-                            font.family: root.uiFont
-                            font.bold: true
-                            font.pixelSize: 12
-                        }
+                    radius: 12
 
-                        Text {
-                            text: root.wifiEnabled
-                                ? "On"
-                                : "Off"
-
-                            color: Theme.textSecondary
-                            font.family: root.uiFont
-                            font.pixelSize: 8
-                        }
-                    }
+                    color: root.wifiEnabled
+                        ? Theme.accent
+                        : Theme.outline
 
                     Rectangle {
-                        Layout.preferredWidth: 46
-                        Layout.preferredHeight: 24
-                        Layout.alignment: Qt.AlignVCenter
+                        width: 18
+                        height: 18
+                        radius: 9
 
-                        radius: 12
+                        anchors.verticalCenter: parent.verticalCenter
 
-                        color: root.wifiEnabled
-                            ? Theme.accent
-                            : Theme.outline
+                        x: root.wifiEnabled
+                            ? parent.width - width - 3
+                            : 3
 
-                        Rectangle {
-                            width: 18
-                            height: 18
-                            radius: 9
+                        color: Theme.background
 
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            x: root.wifiEnabled
-                                ? parent.width - width - 3
-                                : 3
-
-                            color: Theme.background
-
-                            Behavior on x {
-                                NumberAnimation {
-                                    duration: 140
-                                    easing.type: Easing.OutCubic
-                                }
+                        Behavior on x {
+                            NumberAnimation {
+                                duration: 140
+                                easing.type: Easing.OutCubic
                             }
                         }
+                    }
 
-                        MouseArea {
-                            anchors.fill: parent
+                    MouseArea {
+                        anchors.fill: parent
 
-                            onClicked: {
-                                root.toggleWifi()
-                            }
+                        onClicked: {
+                            root.toggleWifi()
                         }
                     }
                 }
@@ -288,7 +293,7 @@ Rectangle {
 
                             color: Theme.text
                             font.family: root.uiFont
-                            font.bold: true
+                            font.weight: Font.DemiBold
                             font.pixelSize: 11
 
                             Layout.fillWidth: true
@@ -301,13 +306,13 @@ Rectangle {
                             radius: 10
                             color: Theme.background
 
-
+                            Text {
                                 anchors.centerIn: parent
 
                                 text: "󰑐"
 
                                 color: Theme.text
-                                font.family: "Symbols Nerd Font"
+                                font.family: root.iconFont
                                 font.pixelSize: 14
                             }
 
@@ -360,7 +365,7 @@ Rectangle {
                                         ? Theme.accent
                                         : Theme.text
 
-                                    font.family: "Symbols Nerd Font"
+                                    font.family: root.iconFont
                                     font.pixelSize: 16
 
                                     Layout.alignment: Qt.AlignVCenter
@@ -375,8 +380,10 @@ Rectangle {
 
                                         color: Theme.text
                                         font.family: root.uiFont
-                                        font.bold: modelData.active
-                                        font.pixelSize: 9
+                                        font.weight: modelData.active
+                                            ? Font.DemiBold
+                                            : Font.Normal
+                                        font.pixelSize: 10
 
                                         elide: Text.ElideRight
 
@@ -390,7 +397,8 @@ Rectangle {
 
                                         color: Theme.textSecondary
                                         font.family: root.uiFont
-                                        font.pixelSize: 7
+                                        font.weight: Font.Normal
+                                        font.pixelSize: 8
 
                                         elide: Text.ElideRight
 
@@ -408,7 +416,8 @@ Rectangle {
                                         : Theme.textSecondary
 
                                     font.family: root.uiFont
-                                    font.pixelSize: 7
+                                    font.weight: Font.Normal
+                                    font.pixelSize: 8
 
                                     Layout.alignment: Qt.AlignVCenter
                                 }

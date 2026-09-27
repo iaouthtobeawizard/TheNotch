@@ -8,6 +8,7 @@ Item {
     id: root
 
     property var smoothBands: []
+    property var targetBands: []
 
     implicitWidth: bars.width
     implicitHeight: 32
@@ -25,11 +26,23 @@ Item {
                 try {
                     var frame = JSON.parse(text)
 
-                    if (frame.bands !== undefined)
-                        root.smoothBands = frame.bands
+                    if (frame.bands !== undefined) {
+                        root.targetBands = frame.bands
+                    }
                 } catch (error) {
                 }
             }
+        }
+    }
+
+    Timer {
+        interval: 25
+        running: true
+        repeat: true
+
+        onTriggered: {
+            if (!frameProcess.running)
+                frameProcess.running = true
         }
     }
 
@@ -39,8 +52,24 @@ Item {
         repeat: true
 
         onTriggered: {
-            if (!frameProcess.running)
-                frameProcess.running = true
+            var next = []
+
+            for (var i = 0; i < root.targetBands.length; i++) {
+                var current = root.smoothBands.length > i
+                    ? root.smoothBands[i]
+                    : 0
+
+                var target = Number(root.targetBands[i])
+
+                if (isNaN(target))
+                    target = 0
+
+                next.push(
+                    current + (target - current) * 0.35
+                )
+            }
+
+            root.smoothBands = next
         }
     }
 
@@ -57,37 +86,50 @@ Item {
                 width: 3
 
                 property real sourceIndex:
-                    5 + index * 14 / 15
-
-                property real value:
                     root.smoothBands.length > 0
-                        ? root.smoothBands[Math.round(sourceIndex)] || 0
+                        ? Math.floor(
+                            index *
+                            (root.smoothBands.length - 1) /
+                            15
+                        )
                         : 0
 
+                property real value:
+                    root.smoothBands.length > sourceIndex
+                        ? Number(root.smoothBands[sourceIndex])
+                        : 0
+
+                property real peak:
+                    root.smoothBands.length > 0
+                        ? Math.max.apply(null, root.smoothBands)
+                        : 1
+
                 property real level:
-                    Math.max(
-                        0,
-                        Math.min(1, value * 0.8 / 12)
-                    )
+                    peak > 0
+                        ? value / peak
+                        : 0
 
                 property real wave:
-                    0.75 + 0.25 * Math.sin(
+                    0.75 +
+                    0.25 *
+                    Math.sin(
                         (index / 15) * Math.PI
                     )
 
                 height:
-                    Math.max(
-                        4,
-                        level * root.height * 0.82 * wave
-                    )
+                    4 +
+                    level *
+                    (root.height * 0.82 - 4) *
+                    wave
 
                 radius: width / 2
                 anchors.verticalCenter: parent.verticalCenter
+
                 color: Theme.accent
 
                 Behavior on height {
                     NumberAnimation {
-                        duration: 90
+                        duration: 70
                         easing.type: Easing.OutCubic
                     }
                 }

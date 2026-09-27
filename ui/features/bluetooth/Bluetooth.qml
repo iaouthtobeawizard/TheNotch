@@ -13,6 +13,12 @@ Rectangle {
     property bool bluetoothEnabled: false
     property var devices: []
 
+    property bool detailsOpen: false
+    property var selectedDevice: ({})
+
+    readonly property string uiFont: "Noto Sans"
+    readonly property string iconFont: "Symbols Nerd Font"
+
     Process {
         id: statusProcess
 
@@ -95,34 +101,6 @@ Rectangle {
         onExited: root.refresh()
     }
 
-    Process {
-        id: connectProcess
-
-        property string address: ""
-
-        command: [
-            "bluetoothctl",
-            "connect",
-            address
-        ]
-
-        onExited: root.refresh()
-    }
-
-    Process {
-        id: disconnectProcess
-
-        property string address: ""
-
-        command: [
-            "bluetoothctl",
-            "disconnect",
-            address
-        ]
-
-        onExited: root.refresh()
-    }
-
     function refresh() {
         statusProcess.running = true
     }
@@ -132,281 +110,317 @@ Rectangle {
         powerProcess.running = true
     }
 
-    function toggleDevice(mac, connected) {
-        if (connected) {
-            disconnectProcess.address = mac
-            disconnectProcess.running = true
-        } else {
-            connectProcess.address = mac
-            connectProcess.running = true
-        }
+    function openDetails(device) {
+        root.selectedDevice = device
+        root.detailsOpen = true
+    }
+
+    function closeDetails() {
+        root.detailsOpen = false
+        root.selectedDevice = {}
+        root.refresh()
     }
 
     Component.onCompleted: refresh()
 
-    ColumnLayout {
+    Loader {
         anchors.fill: parent
-        anchors.margins: 10
-        spacing: 8
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 52
+        sourceComponent: root.detailsOpen
+            ? detailsView
+            : mainView
+    }
 
-            radius: 16
-            color: Theme.surface
+    Component {
+        id: detailsView
 
-            Text {
-                id: bluetoothIcon
+        BluetoothDetails {
+            anchors.fill: parent
 
-                anchors.left: parent.left
-                anchors.leftMargin: 12
-                anchors.verticalCenter: parent.verticalCenter
+            mac: root.selectedDevice.mac || ""
+            name: root.selectedDevice.name || ""
+            connected: root.selectedDevice.connected || false
+            battery: root.selectedDevice.battery !== undefined
+                ? root.selectedDevice.battery
+                : -1
 
-                text: root.bluetoothEnabled
-                    ? "󰂯"
-                    : "󰂲"
-
-                color: root.bluetoothEnabled
-                    ? Theme.accent
-                    : Theme.text
-
-                font.family: "Symbols Nerd Font"
-                font.pixelSize: 19
+            onBackRequested: {
+                root.closeDetails()
             }
+        }
+    }
 
-            Column {
-                anchors.left: bluetoothIcon.right
-                anchors.leftMargin: 8
-                anchors.verticalCenter: parent.verticalCenter
+    Component {
+        id: mainView
 
-                spacing: 0
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 8
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 52
+
+                radius: 16
+                color: Theme.surface
 
                 Text {
-                    text: "Bluetooth"
-                    color: Theme.text
-                    font.bold: true
-                    font.pixelSize: 12
+                    id: bluetoothIcon
+
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    text: root.bluetoothEnabled
+                        ? "󰂯"
+                        : "󰂲"
+
+                    color: root.bluetoothEnabled
+                        ? Theme.accent
+                        : Theme.text
+
+                    font.family: root.iconFont
+                    font.pixelSize: 19
                 }
 
-                Text {
-                    text: root.bluetoothEnabled
-                        ? "On"
-                        : "Off"
+                Column {
+                    anchors.left: bluetoothIcon.right
+                    anchors.leftMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
 
-                    color: Theme.textSecondary
-                    font.pixelSize: 8
+                    spacing: 0
+
+                    Text {
+                        text: "Bluetooth"
+
+                        color: Theme.text
+                        font.family: root.uiFont
+                        font.weight: Font.DemiBold
+                        font.pixelSize: 12
+                    }
+
+                    Text {
+                        text: root.bluetoothEnabled
+                            ? "On"
+                            : "Off"
+
+                        color: Theme.textSecondary
+                        font.family: root.uiFont
+                        font.pixelSize: 8
+                    }
+                }
+
+                Rectangle {
+                    width: 46
+                    height: 24
+
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    radius: 12
+
+                    color: root.bluetoothEnabled
+                        ? Theme.accent
+                        : Theme.outline
+
+                    Rectangle {
+                        width: 18
+                        height: 18
+                        radius: 9
+
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        x: root.bluetoothEnabled
+                            ? parent.width - width - 3
+                            : 3
+
+                        color: Theme.background
+
+                        Behavior on x {
+                            NumberAnimation {
+                                duration: 140
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+
+                        onClicked: {
+                            root.toggleBluetooth()
+                        }
+                    }
                 }
             }
 
             Rectangle {
-                id: bluetoothToggle
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
-                width: 46
-                height: 24
+                radius: 16
+                color: Theme.surface
 
-                anchors.right: parent.right
-                anchors.rightMargin: 8
-                anchors.verticalCenter: parent.verticalCenter
-
-                radius: 12
-
-                color: root.bluetoothEnabled
-                    ? Theme.accent
-                    : Theme.outline
-
-                Rectangle {
-                    width: 18
-                    height: 18
-                    radius: 9
-
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    x: root.bluetoothEnabled
-                        ? parent.width - width - 3
-                        : 3
-
-                    color: Theme.background
-
-                    Behavior on x {
-                        NumberAnimation {
-                            duration: 140
-                            easing.type: Easing.OutCubic
-                        }
-                    }
-                }
-
-                MouseArea {
+                ColumnLayout {
                     anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 4
 
-                    onClicked: {
-                        root.toggleBluetooth()
-                    }
-                }
-            }
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            radius: 16
-            color: Theme.surface
-
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 4
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 32
-
-                    Text {
-                        text: "Paired Devices"
-
-                        color: Theme.text
-                        font.bold: true
-                        font.pixelSize: 11
-
+                    RowLayout {
                         Layout.fillWidth: true
-                    }
-
-                    Rectangle {
-                        Layout.preferredWidth: 30
-                        Layout.preferredHeight: 30
-                        Layout.alignment: Qt.AlignVCenter
-
-                        radius: 10
-                        color: Theme.background
+                        Layout.preferredHeight: 32
 
                         Text {
-                            anchors.centerIn: parent
-
-                            text: "󰑐"
+                            text: "Paired Devices"
 
                             color: Theme.text
-                            font.family: "Symbols Nerd Font"
-                            font.pixelSize: 14
+                            font.family: root.uiFont
+                            font.weight: Font.DemiBold
+                            font.pixelSize: 11
+
+                            Layout.fillWidth: true
                         }
 
-                        MouseArea {
-                            anchors.fill: parent
+                        Rectangle {
+                            Layout.preferredWidth: 30
+                            Layout.preferredHeight: 30
 
-                            onClicked: {
-                                root.refresh()
+                            radius: 10
+                            color: Theme.background
+
+                            Text {
+                                anchors.centerIn: parent
+
+                                text: "󰑐"
+
+                                color: Theme.text
+                                font.family: root.iconFont
+                                font.pixelSize: 14
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+
+                                onClicked: {
+                                    root.refresh()
+                                }
                             }
                         }
                     }
-                }
 
-                ListView {
-                    id: deviceList
+                    ListView {
+                        id: deviceList
 
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
 
-                    clip: true
-                    model: root.devices
-                    spacing: 2
+                        clip: true
+                        model: root.devices
+                        spacing: 2
 
-                    delegate: Rectangle {
-                        width: deviceList.width
-                        height: 48
+                        delegate: Rectangle {
+                            width: deviceList.width
+                            height: 48
 
-                        radius: 11
+                            radius: 11
 
-                        color: modelData.connected
-                            ? Theme.outline
-                            : "transparent"
+                            color: modelData.connected
+                                ? Theme.outline
+                                : "transparent"
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 7
-                            anchors.rightMargin: 7
-                            spacing: 7
-
-                            Text {
-                                text: "󰂱"
-
-                                color: modelData.connected
-                                    ? Theme.accent
-                                    : Theme.text
-
-                                font.family: "Symbols Nerd Font"
-                                font.pixelSize: 16
-
-                                Layout.alignment: Qt.AlignVCenter
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 7
+                                anchors.rightMargin: 7
+                                spacing: 7
 
                                 Text {
-                                    text: modelData.name
+                                    text: "󰂱"
 
-                                    color: Theme.text
-                                    font.bold: modelData.connected
-                                    font.pixelSize: 9
+                                    color: modelData.connected
+                                        ? Theme.accent
+                                        : Theme.text
 
-                                    elide: Text.ElideRight
+                                    font.family: root.iconFont
+                                    font.pixelSize: 16
 
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                ColumnLayout {
                                     Layout.fillWidth: true
+                                    spacing: 0
+
+                                    Text {
+                                        text: modelData.name
+
+                                        color: Theme.text
+                                        font.family: root.uiFont
+                                        font.weight: modelData.connected
+                                            ? Font.DemiBold
+                                            : Font.Normal
+                                        font.pixelSize: 9
+
+                                        elide: Text.ElideRight
+
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Text {
+                                        text: modelData.connected
+                                            ? "Connected"
+                                            : "Paired"
+
+                                        color: modelData.connected
+                                            ? Theme.accent
+                                            : Theme.textSecondary
+
+                                        font.family: root.uiFont
+                                        font.pixelSize: 7
+                                    }
                                 }
 
                                 Text {
-                                    text: modelData.connected
-                                        ? "Connected"
-                                        : "Paired"
+                                    visible: modelData.battery >= 0
+
+                                    text: modelData.battery + "%"
 
                                     color: modelData.connected
                                         ? Theme.accent
                                         : Theme.textSecondary
 
+                                    font.family: root.uiFont
                                     font.pixelSize: 7
+
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                Text {
+                                    text: modelData.connected
+                                        ? "Connected"
+                                        : "Details"
+
+                                    color: modelData.connected
+                                        ? Theme.accent
+                                        : Theme.textSecondary
+
+                                    font.family: root.uiFont
+                                    font.pixelSize: 7
+
+                                    Layout.alignment: Qt.AlignVCenter
                                 }
                             }
 
-                            Text {
-                                visible: modelData.battery >= 0
+                            MouseArea {
+                                anchors.fill: parent
 
-                                text: modelData.battery + "%"
+                                enabled: root.bluetoothEnabled
 
-                                color: modelData.connected
-                                    ? Theme.accent
-                                    : Theme.textSecondary
-
-                                font.pixelSize: 7
-
-                                Layout.alignment: Qt.AlignVCenter
-                            }
-
-                            Text {
-                                text: modelData.connected
-                                    ? "Connected"
-                                    : "Connect"
-
-                                color: modelData.connected
-                                    ? Theme.accent
-                                    : Theme.textSecondary
-
-                                font.pixelSize: 7
-
-                                Layout.alignment: Qt.AlignVCenter
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-
-                            enabled: root.bluetoothEnabled
-
-                            onClicked: {
-                                root.toggleDevice(
-                                    modelData.mac,
-                                    modelData.connected
-                                )
+                                onClicked: {
+                                    root.openDetails(modelData)
+                                }
                             }
                         }
                     }
